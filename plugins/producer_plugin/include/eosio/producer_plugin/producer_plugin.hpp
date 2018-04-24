@@ -6,7 +6,7 @@
 #pragma once
 
 #include <eosio/chain_plugin/chain_plugin.hpp>
-
+#include <clusterapi/clusterapi.hpp> 
 #include <appbase/application.hpp>
 
 namespace eosio {
@@ -21,7 +21,9 @@ namespace block_production_condition {
       no_private_key = 4,
       low_participation = 5,
       lag = 6,
-      exception_producing_block = 7
+      exception_producing_block = 7,
+
+      not_elected_to_produce = 2104 // cluster api addition
    };
 }
 

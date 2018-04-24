@@ -44,6 +44,8 @@ public:
 
    block_production_condition::block_production_condition_enum _prev_result = block_production_condition::produced;
    uint32_t _prev_result_count = 0;
+
+   cluster clstr;
 };
 
 void new_chain_banner(const eosio::chain::chain_controller& db)
@@ -245,6 +247,18 @@ block_production_condition::block_production_condition_enum producer_plugin_impl
          case block_production_condition::not_my_turn:
        //     ilog("Not producing block because it isn't my turn, its ${scheduled_producer}", (capture) );
             break;
+
+         // it is the producers schedule but a different machine in within the producer cluster will handle the production
+         // of blocks on this round.                                         
+         case block_production_condition::not_elected_to_produce: {                  
+                                                                                 
+                const auto& db = app().get_plugin<chain_plugin>().chain();              
+                auto producer  = db.head_block_producer();                          
+                                                                                   
+                wlog("\rMy clustered node is scheduled to produce . I am skipping this block because I am not elected to produce.");
+                break;                                                              
+         } 
+            
          case block_production_condition::not_time_yet:
         //    ilog("Not producing block because slot has not yet arrived");
             break;
@@ -332,6 +346,16 @@ block_production_condition::block_production_condition_enum producer_plugin_impl
    }
 
 
+   // To facilitate clustering/HA we add an extra decision step before a block is generated.
+   // Ask from eos/libraries/clusterapi if this machine is allowed to produce this height according to cluster rules.
+   // If no, return the not_elected_to_produce condition and proceed with normal  syncing of blocks. This will make
+   // the machine to immediately, as normal with other production conditions, start pushing blocks from the elected producer machine.
+                                                                                  
+   if( !clstr.can_i_produce() )                                                 
+   {                                                                            
+     return block_production_condition::not_elected_to_produce;                
+   }  
+
    auto block = chain.generate_block(
       scheduled_time,
       scheduled_producer,
@@ -342,6 +366,9 @@ block_production_condition::block_production_condition_enum producer_plugin_impl
    capture("n", block.block_num())("t", block.timestamp)("c", now)("count",block.input_transactions.size())("id",string(block.id()).substr(8,8));
 
    app().get_plugin<net_plugin>().broadcast_block(block);
+
+   // TODO: Notify clusterapi on the number of blocks already produced for this round.
+
    return block_production_condition::produced;
 }
 
